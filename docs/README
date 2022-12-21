@@ -1,0 +1,20 @@
+Steps to build the html documentation
+=====================================
+1. Install sphinx (https://www.sphinx-doc.org/en/1.8/usage/installation.html)
+
+2. Install sphinx extensions:
+     - autoapi.sphinx (https://autoapi.readthedocs.io/)
+     - sphinxcontrib.bibtex (https://sphinxcontrib-bibtex.readthedocs.io/en/latest/)
+
+3. Install all python3 packages needed by msiplib modules, including
+     - numpy (https://numpy.org/)
+     - scipy (https://www.scipy.org/)
+     - scikit-learn (https://scikit-learn.org/stable/)
+     - matplotlib (https://matplotlib.org/)
+     - numba (https://numba.pydata.org/)
+     - pillow (https://pillow.readthedocs.io/en/stable/)
+     - pyfftw (https://pyfftw.readthedocs.io/en/latest/source/tutorial.html)
+
+4. Run "make html" in the docs/ directory
+
+The main page of the html documentation is docs/_build/html/index.html.

@@ -1,0 +1,49 @@
+name: msiplib
+channels:
+  - pytorch 
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.9
+  - atomap
+  - conda-build
+  - configargparse
+  - gitpython
+  - hyperopt
+  - hyperspy
+  - imageio
+  - ipython
+  - jax
+  - jupyterlab
+  - matplotlib
+  - natsort
+  - ncempy
+  - netCDF4
+  - numba
+  - numexpr
+  - openssl=1.1.1
+  - optuna
+  - pandas
+  - pip
+  - plotly
+  - pyfftw
+  - pylint
+  - pyqt
+  - python-kaleido
+  - pytorch
+  - qimage2ndarray
+  - scikit-image
+  - scikit-learn
+  - spectral
+  - sphinxcontrib-bibtex
+  - tikzplotlib
+  - torchvision
+  - torchaudio
+  - tqdm
+  - umap-learn
+  - pip:
+    - autoapi
+    - finufft
+    - -e .
+ 
