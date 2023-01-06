@@ -117,11 +117,16 @@ def main():
         # if true, try to solve empty segments when they occur (bool)
         'solve_empty_segment': False,
         # if true, save found indermediate segmentations (bool)
-        'save_intermediate_segs': False
+        'save_intermediate_segs': False,
+        # if true, run computations on GPU if device and CUDA available
+        'use_gpu': False
     }
 
-    # set environment variable for output
-    os.environ["OUTPUT_DIR"] = "."
+    # set environment variable for output. determines where the output is stored
+    os.environ['OUTPUT_DIR'] = '.'
+
+    # set an environment variable pointing to the parent folder of the msiplib repository
+    os.environ['REPOS_DIR'] = '../../..'
 
     ms_segmentation(args)
 

@@ -43,7 +43,8 @@ def parse_args():
     parser.add_argument('--indeps', default=0.1, dest='ind_eps', type=float, nargs='?',
                         help='Epsilon to regularize indicator function.')
     parser.add_argument('--kernel', dest='kernel', default='gaussian', type=str,
-                        choices=['gaussian', 'polynomial', 'chi-squared', 'laplacian', 'cosine', 'sigmoid'],
+                        choices=['gaussian', 'polynomial', 'chi-squared', 'laplacian', 'cosine', 'sigmoid',
+                                 'direct-summation', 'weighted-summation', 'cross-information'],
                         help='Kernel function.')
     parser.add_argument('--indparams', default='0.01', nargs='+', dest='ind_params', type=float,
                         help='List of parameters for indicator function.')
@@ -99,6 +100,8 @@ def parse_args():
                         help='If set, try solve problem with empty segments instead of stopping iterations.')
     parser.add_argument('--saveintermediatesegs', dest='save_intermediate_segs', action='store_true',
                         help='If set, save intermediate segmentations in each iteration.')
+    parser.add_argument('--usegpu', dest='use_gpu', action='store_true',
+                        help='If set, use GPU when available.')
 
     args = parser.parse_args()
 
@@ -112,7 +115,7 @@ def initialize_logger(args):
     ''' initialization of logger'''
     path = os.path.expandvars('${OUTPUT_DIR}/segmentation/{}') \
 			.format(map_ind_func_to_folder_name(args['ind_func'], args['kernel']))
-    image_index = get_image_index(args['filename'])
+    image_index, image_abbr = get_image_index(args['filename'])
     path = f'{path}/{image_index}'
 
     if not os.path.exists(path):
@@ -121,7 +124,7 @@ def initialize_logger(args):
     now = datetime.now()
     time_stamp = f'{now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-'\
                  f'{now.second}'
-    folder_name = f"{image_index}-{time_stamp}_"\
+    folder_name = f"{image_abbr}-{time_stamp}_"\
                   f"lam{str(args['reg_par']).replace('.', '_')}_"\
                   f"indp{str(args['ind_eps']).replace('.', '_').replace(' ', '_').replace(',', '_').replace('[','').replace(']','')}_"\
                   f"nfeat{str(int(args['n_features']))}"
@@ -229,6 +232,10 @@ def initialize_logger(args):
     ms_logger.info('Initialization method: %s', args['init'])
     ms_logger.info('Seed for randomness: %s', args['seed'])
     ms_logger.info('Solve empty segment: %s', args['solve_empty_segment'])
+    if args['use_gpu']:
+        ms_logger.info('Use GPU.')
+    else:
+        ms_logger.info('Use CPU.')
 
     return ms_logger, filepath_name
 
@@ -254,40 +261,50 @@ def get_image_index(filename):
     # Botswana
     if name.find('Botswana') >= 0:
         index = 'Botswana'
+        abbr = 'BW'
 
     # ftir_zero
     elif name.find('ftir_zero') >= 0:
         index = 'ftir_zero'
+        abbr = 'ftir0'
 
     # ftir
     elif name.find('ftir') >= 0:
         index = 'ftir'
+        abbr = 'ftir'
 
     # IndianPines
     elif name.find('IndianPines') >= 0:
         index = 'IndianPines'
+        abbr = 'IP'
 
     # KennedySpaceCenter
     elif name.find('KennedySpaceCenter') >= 0:
         index = 'KennedySpaceCenter'
+        abbr = 'KSC'
 
     # PaviaCenter
     elif name.find('PaviaCenter') >= 0:
         index = 'PaviaCenter'
+        abbr = 'PC'
 
     # PaviaUniversity
     elif name.find('PaviaUniversity') >= 0:
         index = 'PaviaUniversity'
+        abbr = 'PU'
 
     # Salinas, SalinasA, SalinasA_mod
     elif name.find('Salinas') >= 0:
         if name.find('SalinasA') >= 0:
             if name.find('_mod') >= 0:
                 index = 'SalinasA_mod'
+                abbr = 'SAAm'
             else:
                 index = 'SalinasA'
+                abbr = 'SAA'
         else:
             index = 'Salinas'
+            abbr = 'SA'
 
     # Synthetic images
     elif name.find('synthetic') >= 0:
@@ -297,21 +314,27 @@ def get_image_index(filename):
                else name.find('.'))
         end = name.find('.') if name.find('_', start) < name.find('.', start) else name.find('_', start)
         index = name[start : end]
+        abbr = 'syn'
 
     # Urban
     elif name.find('Urban') >= 0:
         index = 'Urban'
+        abbr = 'UB'
 
     # all other cases
     else:
         index = 0
+        abbr = 0
 
     if name.find('reduced') >= 0:
         index = f'{index}_rpca'
+        abbr = f'{abbr}_rpca'
 
     if '3dcae-fl' in name:
         index = f'{index}_3dcae-fl'
-    return index
+        abbr = f'{abbr}_3dcae-fl'
+
+    return index, abbr
 
 
 def create_config(filename, args):
@@ -347,7 +370,8 @@ def create_config(filename, args):
         'ignore_pixels': 'ignorepixels',
         'ignore_pixels_data_term': 'ignorepixelsdataterm',
         'solve_empty_segment': 'solveemptysegment',
-        'save_intermediate_segs': 'saveintermediatesegs'
+        'save_intermediate_segs': 'saveintermediatesegs',
+        'use_gpu': 'usegpu'
     }
 
     # add elements from args dictionary to translated version
@@ -390,7 +414,7 @@ def get_git_info():
     git_info = {}
 
     # msiplib repository
-    msiplib_repo = git.Repo(path=os.path.expandvars('${REPOS_DIR}/msip/msiplib'))
+    msiplib_repo = git.Repo(path=os.path.expandvars('${REPOS_DIR}/msiplib'))
     git_info['msiplib'] = {'branch': msiplib_repo.active_branch.name, 'commit': msiplib_repo.head.object.hexsha}
 
     return git_info

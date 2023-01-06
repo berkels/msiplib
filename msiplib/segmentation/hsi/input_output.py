@@ -91,9 +91,21 @@ def read_inputimage(filename, gt_file=None, precision='float'):
 
 
 def save_segmentation(filepath_name, seg, image=None, gt_file=None, ignore_label=None, seg_boundaries=False,
-                      irreg=False, means=None, pcs=None, std_devs=None):
+                      irreg=False, means=None, pcs=None, std_devs=None, use_gpu=False):
 
     ''' save resulting segmentation as a png image and as netCDF4 '''
+
+    if use_gpu:
+        from cupy import asnumpy
+        if image is not None:
+            image = asnumpy(image)
+        seg = asnumpy(seg)
+        if means is not None:
+            means = asnumpy(means)
+        if pcs is not None:
+            pcs = asnumpy(pcs)
+        if std_devs is not None:
+            std_devs = asnumpy(std_devs)
 
     if image is not None:
         if gt_file is not None:

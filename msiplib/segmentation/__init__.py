@@ -61,7 +61,7 @@ def convert_segmentation_to_partition(segmentation, order='C'):
 
 def get_segmentation_mean_values(input_image, segmentation, num_segments):
     ''' yields mean feature vectors of segments '''
-    mean_values = np.zeros((num_segments, input_image.shape[2] if input_image.ndim == 3 else 1), dtype=input_image.dtype)
+    mean_values = np.zeros_like(input_image, shape=(num_segments, input_image.shape[2] if input_image.ndim == 3 else 1), dtype=input_image.dtype)
     for k in range(num_segments):
         mean_values[k, :] = np.mean(input_image[segmentation == k], axis=0)
     return mean_values

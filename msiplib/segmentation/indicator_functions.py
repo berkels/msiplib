@@ -7,6 +7,7 @@
 import logging
 import numpy as np
 from numba import jit, prange
+from scipy.ndimage import uniform_filter
 from scipy.stats import trimboth, trim_mean
 from sklearn.metrics.pairwise import pairwise_kernels
 from spectral import calc_stats, noise_from_diffs, mnf
@@ -82,13 +83,14 @@ def nonsquared_anistropic_2norm(image, seg_mask, label, eps, means, pcs, weights
 
     # initialize mean values for segment and allocate necessary memory
     tau = 1e-02
-    seg_mean_old = np.full(image.shape[-1], np.finfo(np.float32).max, dtype=image.dtype)
-    weights_old = np.full(image.shape[-1], np.finfo(np.float32).max, dtype=image.dtype)
-    seg_pcs_old = np.full((image.shape[-1], image.shape[-1]), np.finfo(np.float32).max, dtype=image.dtype)
-    dists_inv = np.empty(valid_segment_pixels.shape[0], dtype=image.dtype)
-    pxs_centered = np.empty(valid_segment_pixels.shape, dtype=image.dtype)
-    pxs_scaled = np.empty(valid_segment_pixels.shape, dtype=image.dtype)
-    cov = np.empty((image.shape[-1], image.shape[-1]), dtype=image.dtype)
+    seg_mean_old = np.full_like(means, np.finfo(np.float32).max, shape=image.shape[-1], dtype=image.dtype)
+    weights_old = np.full_like(weights, np.finfo(np.float32).max, shape=image.shape[-1], dtype=image.dtype)
+    seg_pcs_old = np.full_like(pcs, np.finfo(np.float32).max, shape=(image.shape[-1], image.shape[-1]),
+                               dtype=image.dtype)
+    dists_inv = np.empty_like(image, shape=valid_segment_pixels.shape[0], dtype=image.dtype)
+    pxs_centered = np.empty_like(image, shape=valid_segment_pixels.shape, dtype=image.dtype)
+    pxs_scaled = np.empty_like(image, shape=valid_segment_pixels.shape, dtype=image.dtype)
+    cov = np.empty_like(image, shape=(image.shape[-1], image.shape[-1]), dtype=image.dtype)
 
     # TODO: Can we work with references here instead of copying the data? Would that make returning weights unnecessary?
     t_weights = weights[label].copy()

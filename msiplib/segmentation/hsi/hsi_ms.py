@@ -11,7 +11,6 @@ import sys
 import timeit
 from shutil import copy, rmtree
 
-# import cupy as cp
 import numpy as np
 
 from msiplib.segmentation.hsi.args_processing import create_config, initialize_logger, parse_args
@@ -67,7 +66,7 @@ def compute_indicator_functions(image, segmentation, k, args, valid_mask=None, m
     logger = logging.getLogger('indicator')
 
     # initialize array for storing the indicator values
-    f = np.zeros((image.shape[0], image.shape[1], k), dtype=image.dtype)
+    f = np.zeros_like(image, shape=(image.shape[0], image.shape[1], k), dtype=image.dtype)
 
     # if an anisotropic indicator function is chosen, compute minimum of log det cov and subtract it to ensure
     # that the minimum of the indicator functions is 0
@@ -136,9 +135,6 @@ def update_u(u, f, lambda_, max_iter=1000, eps=1e-06, convexification='zach', pd
     ''' functions performs an update of u, i.e., one inner iteration '''
     inner_logger = logging.getLogger('inner')
 
-    # u = cp.array(u)
-    # f = cp.array(f)
-
     tstart = timeit.default_timer()
     if convexification == 'zach':
         u, _, it = \
@@ -149,8 +145,6 @@ def update_u(u, f, lambda_, max_iter=1000, eps=1e-06, convexification='zach', pd
     time_elapsed = timeit.default_timer() - tstart
     inner_logger.info('Time elapsed: %ss', time_elapsed)
     inner_logger.info('Number of iterations: %s', it)
-
-    # u = cp.asnumpy(u)
 
     return u
 
@@ -171,7 +165,7 @@ def stopping_criterion(segmentation, last_means, image, num_segments, threshold=
     means_dev[np.isnan(means_dev)] = np.finfo(image.dtype).max
 
     # compute weights for weighted average based on number of pixels in segment
-    weights = np.zeros(num_segments, dtype=image.dtype)
+    weights = np.zeros_like(image, shape=num_segments, dtype=image.dtype)
     for l in range(num_segments):
         weights[l] = (segmentation == l).sum() / n
 
@@ -261,13 +255,13 @@ def ms_segmentation(args):
         if args['ignore_pixels']:
             valid_mask_comps = m
         else:
-            valid_mask_comps = np.ones((inputimage.shape[0], inputimage.shape[1]), dtype=bool)
+            valid_mask_comps = np.ones_like(inputimage, shape=(inputimage.shape[0], inputimage.shape[1]), dtype=bool)
 
         if args['ignore_pixels_data_term']:
             valid_mask_dataterm = m
 
     else:
-        valid_mask_comps = np.ones((inputimage.shape[0], inputimage.shape[1]), dtype=bool)
+        valid_mask_comps = np.ones_like(inputimage, shape=(inputimage.shape[0], inputimage.shape[1]), dtype=bool)
         valid_mask_dataterm = valid_mask_comps
 
     # select relevant bands if image has more than three bands and band selection method is provided
@@ -331,12 +325,35 @@ def ms_segmentation(args):
     outer_logger.addHandler(console_handler)
 
 
+    # if computations should be run on GPU, copy data to GPU
+    if args['use_gpu']:
+        # check the availability of GPU computations by importing cupy
+        try:
+            import cupy as cp # pylint: disable=import-outside-toplevel
+        except ModuleNotFoundError:
+            init_logger.warning('Cupy not available. Fall back to CPU.')
+            args['use_gpu'] = False
+        else:
+            # if import of cupy succeeds, data can be copied to GPU
+            inputimage = cp.array(inputimage)
+            segmentation = cp.array(segmentation)
+            st_means = cp.array(st_means)
+            valid_mask_comps = cp.array(valid_mask_comps)
+            if args['ignore_pixels_data_term']:
+                valid_mask_dataterm = cp.array(valid_mask_dataterm)
+            if args['ind_func'] == 'non-squared-anisotropic-eps-inverse':
+                means = cp.array(means)
+                pcs = cp.array(pcs)
+                weights = cp.array(weights)
+            elif 'kernel' in args['ind_func']:
+                kernel_matrix = cp.array(kernel_matrix)
+
     for i in range(args['outer_iter']):
         it = i + 1
         outer_logger.info('Iteration %s', it)
 
         # initialize u based on the current segmentation
-        u = np.zeros((inputimage.shape[0], inputimage.shape[1], k), dtype=inputimage.dtype)
+        u = np.zeros_like(inputimage, shape=(inputimage.shape[0], inputimage.shape[1], k), dtype=inputimage.dtype)
         for l in range(k):
             u[segmentation == l, l] = 1.0
 
@@ -368,7 +385,10 @@ def ms_segmentation(args):
 
         # log score after each iteration if ground truth is available
         if seg_gt is not None:
-            scores = metrics.segmentation_scores(segmentation_new, seg_gt, args['ignore_label'])
+            if args['use_gpu']:
+                scores = metrics.segmentation_scores(cp.asnumpy(segmentation_new), seg_gt, args['ignore_label'])
+            else:
+                scores = metrics.segmentation_scores(segmentation_new, seg_gt, args['ignore_label'])
             outer_logger.info('OA: %s', scores['overallAcc'])
 
         # check if there is an empty segment. if so, stop iterating
@@ -390,17 +410,17 @@ def ms_segmentation(args):
             if 'original_image' in locals():
                 if 'means' in locals() and 'pcs' in locals() and 'weights' in locals():
                     save_segmentation(f_name, segmentation_new, original_image, args['gt_file'], args['ignore_label'],
-                                      True, args['irreg'], means, pcs, np.reciprocal(weights))
+                                      True, args['irreg'], means, pcs, np.reciprocal(weights), use_gpu=args['use_gpu'])
                 else:
                     save_segmentation(f_name, segmentation_new, original_image, args['gt_file'], args['ignore_label'],
-                                      True, args['irreg'])
+                                      True, args['irreg'], use_gpu=args['use_gpu'])
             else:
                 if 'means' in locals() and 'pcs' in locals() and 'weights' in locals():
                     save_segmentation(f_name, segmentation_new, None, args['gt_file'], args['ignore_label'],
-                                      True, args['irreg'], means, pcs, np.reciprocal(weights))
+                                      True, args['irreg'], means, pcs, np.reciprocal(weights), use_gpu=args['use_gpu'])
                 else:
                     save_segmentation(f_name, segmentation_new, None, args['gt_file'], args['ignore_label'],
-                                      True, args['irreg'])
+                                      True, args['irreg'], use_gpu=args['use_gpu'])
 
         # check the stopping criterion
         stop, st_means = stopping_criterion(segmentation_new, st_means, inputimage, k,
@@ -416,11 +436,16 @@ def ms_segmentation(args):
     outer_logger.info('Total time elapsed: %fs', time_elapsed)
     outer_logger.info('Number of outer iterations: %s', it)
 
-    # save the found minimizer u of the Zach functional
-    saveArrayAsNetCDF(u, f'{filepath_name}_u.nc')
-
     # compute and log the resulting value of the minimized functional
     outer_logger.info('Final functional value: %s', zach_functional(u, f, lambda_))
+
+    # copy data back to CPU to save results
+    if args['use_gpu']:
+        u = cp.asnumpy(u)
+        segmentation_new = cp.asnumpy(segmentation_new)
+
+    # save the found minimizer u of the Zach functional
+    saveArrayAsNetCDF(u, f'{filepath_name}_u.nc')
 
     ######################## evaluation ##########################
     if (args['gt_file'] is not None) or nc_gt_flag:
@@ -434,18 +459,18 @@ def ms_segmentation(args):
     if 'original_image' in locals():
         if 'means' in locals() and 'pcs' in locals() and 'weights' in locals():
             save_segmentation(filepath_name, segmentation_new, original_image, args['gt_file'], args['ignore_label'],
-                              True, args['irreg'], means, pcs, np.reciprocal(weights))
+                              True, args['irreg'], means, pcs, np.reciprocal(weights), use_gpu=args['use_gpu'])
         else:
             save_segmentation(filepath_name, segmentation_new, original_image, args['gt_file'], args['ignore_label'],
-                              True, args['irreg'])
+                              True, args['irreg'], use_gpu=args['use_gpu'])
 
     else:
         if 'means' in locals() and 'pcs' in locals() and 'weights' in locals():
             save_segmentation(filepath_name, segmentation_new, None, args['gt_file'], args['ignore_label'],
-                              True, args['irreg'], means, pcs, np.reciprocal(weights))
+                              True, args['irreg'], means, pcs, np.reciprocal(weights), use_gpu=args['use_gpu'])
         else:
             save_segmentation(filepath_name, segmentation_new, None, args['gt_file'], args['ignore_label'],
-                              True, args['irreg'])
+                              True, args['irreg'], use_gpu=args['use_gpu'])
 
     if (args['gt_file'] is not None) or nc_gt_flag:
         return -1 * score
