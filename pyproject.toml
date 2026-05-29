@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "msiplib"
+version = "0.1"
+authors = [{name = "Benjamin Berkels", email = "berkels@aices.rwth-aachen.de"}]
+description = "A collection of functions and classes useful for signal and image processing."
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+urls = {Homepage = "https://git.rwth-aachen.de/msip/msiplib"}
+dependencies = [
+    "imageio",
+    "joblib",
+    "netCDF4",
+    "ncempy",
+    "numba",
+    "pyfftw",
+    "pyyaml",
+    "scipy",
+    "scikit-image",
+    "scikit-learn",
+    "tqdm",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages]
+find = {namespaces = false}

@@ -1,28 +1,32 @@
 name: msiplib
 channels:
-  - pytorch 
+  - pytorch
   - conda-forge
-  - anaconda
-  - defaults
 dependencies:
-  - python=3.9
+  - python=3.12
   - atomap
+  - cerberus
   - conda-build
   - configargparse
+  - coscine
+  - finufft
   - gitpython
+  - humanize
   - hyperopt
   - hyperspy
   - imageio
   - ipython
+  # jax not under Windows
   - jax
   - jupyterlab
+  - keyring
   - matplotlib
   - natsort
   - ncempy
   - netCDF4
   - numba
   - numexpr
-  - openssl=1.1.1
+  - openssl
   - optuna
   - pandas
   - pip
@@ -36,14 +40,17 @@ dependencies:
   - scikit-image
   - scikit-learn
   - spectral
+  - sphinx<7.4
+  - sphinx-autodoc-typehints
   - sphinxcontrib-bibtex
   - tikzplotlib
   - torchvision
   - torchaudio
   - tqdm
   - umap-learn
+  - xarray
   - pip:
     - autoapi
-    - finufft
-    - -e .
- 
+    # Windows only
+    # - jax[cpu]
+    - -e . --config-settings editable_mode=strict

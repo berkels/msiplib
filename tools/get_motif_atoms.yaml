@@ -1,0 +1,12 @@
+save_directory: NEW_WILL_BE_CREATED/
+compute_uv: on
+
+input_file: "../examples/images/left_grain.png"
+save_name: "left_grain"
+v1: [18.29, -2.69]
+v2: [11.47, 14.3 ]
+num_motif_atoms: 2
+separation: 1
+initial_diameter: 10
+# erase_inf_radius: 8
+show_motif_legend: True

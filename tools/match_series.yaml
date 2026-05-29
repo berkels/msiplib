@@ -1,0 +1,30 @@
+# 9: ParametricAffineDeformation, 12: ParametricTranslation, 20: ParametricRigidBodyMotion
+deformationModel: 9
+
+templateNamePattern: "https://github.com/conda-forge/match-series-feedstock/raw/main/recipe/testImg_%d_STEM.tif"
+templateNumOffset: 0
+templateNumStep: 1
+numTemplates: 4
+
+saveDirectory: NEW_WILL_BE_CREATED/
+
+useCorrelationToInitTranslation: on
+correlationOverlapRatio: 0.98 # = (256-5)/256, i.e. limit the shift by correlation of a 256x256 image to 5 pixels.
+reduceTranslations: on
+
+numLevels: 3
+
+earlyStopLevel: 0
+numRefineLevels: 1
+
+stopEpsilon: 1.e-6
+minimizer: "trf"
+# "ScipySpline", "bilinear"
+interpolation: "ScipySpline"
+computeAverage: on
+
+maxIterations: 100
+# averageSaveIncrement: 1
+alignToAverage: off
+preSmoothSigma: 0
+convertInputToGrayscale: off

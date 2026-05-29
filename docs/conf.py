@@ -48,11 +48,12 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
     'sphinx.ext.ifconfig',
-    'sphinx.ext.imgmath',
+    'sphinx.ext.mathjax',
     'sphinx.ext.coverage',
     'function_index',
     'class_index',
-    'sphinxcontrib.bibtex'
+    'sphinxcontrib.bibtex',
+    "sphinx_autodoc_typehints"
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -91,6 +92,11 @@ show_authors = True
 
 # Order functions by their order in the source code files
 autodoc_member_order = 'bysource'
+
+# Suppress selected warnings
+suppress_warnings = [
+    'autosummary.import_cycle',
+]
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -200,14 +206,6 @@ epub_exclude_files = ['search.html']
 
 # -- Extension configuration -------------------------------------------------
 
-# -- Options for imgmath extension -------------------------------------------
-
-# Output format (either 'png' or 'svg')
-imgmath_image_format = 'svg'
-
-# Optimize vertical alignment of rendered math (requires the latex preview package)
-imgmath_use_preview = True
-
 # -- Options for todo extension ----------------------------------------------
 
 # If true, `todo` and `todolist` produce output, else they produce nothing.
@@ -271,9 +269,9 @@ class ExtAutoSummary(Autosummary):
             elif 'functions' in self.options:
                 m = importlib.import_module(self.arguments[0])
 
-                funcs = inspect.getmembers(m)
-                funcs = [f for f in funcs if inspect.getmodule(f[1]) == m and callable(f[1]) and not inspect.isclass(f[1])]
-                funcs = sorted(funcs, key=lambda f: f[1].__code__.co_firstlineno)
+                funcs = inspect.getmembers(m)    
+                funcs = [f for f in funcs if inspect.getmodule(f[1]) == m]
+                funcs = sorted(funcs, key=lambda f: getattr(f[1], '__code__', None) and f[1].__code__.co_firstlineno or float('inf'))
 
                 self.content = ["~%s.%s" % (self.arguments[0], f[0]) for f in funcs if not f[0].startswith('_')]
         finally:

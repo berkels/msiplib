@@ -1,4 +1,3 @@
-#pylint: disable-msg=too-many-arguments
 '''
     Signal and Image Processing Lib
     ===============================

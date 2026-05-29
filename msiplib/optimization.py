@@ -1,6 +1,6 @@
-'''
-    Implementation of various optimization algorithms
-'''
+"""
+Implementation of various optimization algorithms.
+"""
 import math
 import numpy as np
 import logging
@@ -9,38 +9,52 @@ from scipy.linalg.interpolative import estimate_spectral_norm
 from scipy.sparse.linalg import LinearOperator
 
 
-def pd_hybrid_grad_alg(u0, proxG, proxHStar, A, MinusAStar, lambda_, maxNumIter,
-                       stopEps, verbose=True, p=None, L=8, PDHGAlgType=1,
-                       gamma=None):
-    r"""Implementation of the primal-dual algorithm by Chambolle and Pock :cite:`ChPo11` to find
-       :math:`(u',p')` such that
+def pd_hybrid_grad_alg(
+    u0,
+    proxG,
+    proxHStar,
+    A,
+    MinusAStar,
+    lambda_,
+    maxNumIter,
+    stopEps,
+    verbose=True,
+    p=None,
+    L=2.828427124746,
+    PDHGAlgType=1,
+    gamma=None,
+):
+    r"""
+    Implementation of the primal-dual algorithm by Chambolle and Pock :cite:`ChPo11`.
 
-       .. math::
-         A(u') \cdot p' + G(u') - H^*(p') = \inf_u \sup_p (A(u) \cdot p + G(u) - H^*(p))
+    Computes :math:`(u',p')` such that
+
+    .. math::
+      A(u') \cdot p' + G(u') - H^*(p') = \inf_u \sup_p (A(u) \cdot p + G(u) - H^*(p)).
     """
 
     if not np.issubdtype(u0.dtype, np.floating):
-        raise ValueError(
-            "Input u0 is expected to be floating point, but is {}.".format(u0.dtype))
+        raise ValueError("Input u0 is expected to be floating point, but is {}.".format(u0.dtype))
 
     u = u0.copy()
 
+    # Use zero as the initial guess for p unless an initial guess was explicitly
+    # specified
+    if p is None:
+        p = np.zeros_like(A(u0))
+    elif u0.dtype != p.dtype:
+        raise ValueError(
+            "If supplied, p is assumed to have the same dtype as u0, but {} and {} differ.".format(p.dtype, u0.dtype)
+        )
+
     if L is None:
-        L = estimate_spectral_norm_of_A(A, MinusAStar, u.shape)
+        L = estimate_spectral_norm_of_A(A, MinusAStar, u.shape, p.shape)
         print(f"Estimated L={L}")
 
     # Default values that ensure convergence of the algorithm
     tau = 1 / L
     sigma = tau
     theta = 1.0
-
-    # Use zero as the initial guess for p unless an initial guess was explicitly
-    # specified
-    if p is None:
-        p = np.zeros_like(u0, shape=(2, ) + u0.shape)
-    elif u0.dtype != p.dtype:
-        raise ValueError(
-            "If supplied, p is assumed to have the same dtype as u0, but {} and {} differ.".format(p.dtype, u0.dtype))
 
     u_new = u.copy()
     u_bar = u.copy()
@@ -71,45 +85,43 @@ def pd_hybrid_grad_alg(u0, proxG, proxHStar, A, MinusAStar, lambda_, maxNumIter,
         np.copyto(u, u_new)
 
         # Display the norm of the updates to u every 10 iterations
-        if verbose and np.mod(i+1, 10) == 0:
+        if verbose and np.mod(i + 1, 10) == 0:
             pbar.set_postfix_str("update={0:1.3e}".format(threshold))
 
         # Check stopping criterion
-        if (threshold < stopEps):
+        if threshold < stopEps:
             iterations = i
             if verbose:
                 pbar.close()
-                print("stopping after {} iterations with update={}".format(
-                    i, threshold))
+                print("stopping after {} iterations with update={}".format(i, threshold))
             break
 
     return u, p, iterations
 
 
-def estimate_spectral_norm_of_A(A, MinusAStar, grid_shape):
-    num_rows = np.prod((len(grid_shape),)+grid_shape)
-    num_cols = np.prod(grid_shape)
+def estimate_spectral_norm_of_A(A, MinusAStar, col_shape, row_shape):
+    num_rows = np.prod(row_shape)
+    num_cols = np.prod(col_shape)
 
     def matvec(x):
-        return A(x.reshape(grid_shape)).ravel()
+        return A(x.reshape(col_shape)).ravel()
 
     def matmat(X):
         raise NotImplementedError("not implemented")
 
     def rmatvec(x):
-        return -MinusAStar(x.reshape((len(grid_shape),)+grid_shape)).ravel()
+        return -MinusAStar(x.reshape(row_shape)).ravel()
 
-    A_opertor = LinearOperator(
-        (num_rows, num_cols), matvec=matvec, matmat=matmat, rmatvec=rmatvec)
+    A_operator = LinearOperator((num_rows, num_cols), matvec=matvec, matmat=matmat, rmatvec=rmatvec)
 
-    return estimate_spectral_norm(A_opertor, its=100)
+    return estimate_spectral_norm(A_operator, its=100)
 
 
 def validateDerivative(E, DE, position, N=100, h=0.0001, dir=None):
     """
     Calculates the Gateaux derivative (a generalization of the concept of the
-    directional derivative) using the gradient of a given function.
-    Then plots the Gateaux derivative and the original Energy.
+    directional derivative) using the gradient of a given function. Then plots the
+    Gateaux derivative and the original Energy.
 
     The gradient is valid if the Gateaux derivative is the tangent of the Energy function.
 
@@ -134,28 +146,29 @@ def validateDerivative(E, DE, position, N=100, h=0.0001, dir=None):
 
     initialEnergy = E(position)
     gradient = DE(position)
-    if (dir is not None):
+    if dir is not None:
         direction = dir
     else:
         direction = -gradient
-    coords = np.linspace(0, h*(N-1), num=N)
+    coords = np.linspace(0, h * (N - 1), num=N)
     Energy = np.zeros((N))
     Gateaux = np.zeros((N))
     gateauxDerivative = np.dot(gradient.ravel(), direction.ravel())
     for i in range(N):
-        Energy[i] = E(position + coords[i]*direction)
-        Gateaux[i] = initialEnergy + coords[i]*gateauxDerivative
+        Energy[i] = E(position + coords[i] * direction)
+        Gateaux[i] = initialEnergy + coords[i] * gateauxDerivative
     import matplotlib.pyplot as plt
-    plt.plot(coords, Energy, label=r'$E[x+td]$')
-    plt.plot(coords, Gateaux, label=r'$E[x]+tDE[x]\cdot d$')
-    plt.xlabel(r'$t$')
+
+    plt.plot(coords, Energy, label=r"$E[x+td]$")
+    plt.plot(coords, Gateaux, label=r"$E[x]+tDE[x]\cdot d$")
+    plt.xlabel(r"$t$")
     plt.legend()
     plt.show()
     return
 
 
 def validateDerivativeAllDirections(E, DE, position, N=100, h=0.0001):
-    it = np.nditer(position, flags=['multi_index'])
+    it = np.nditer(position, flags=["multi_index"])
     for x in it:
         dir = np.zeros_like(position)
         dir[it.multi_index] = 1
@@ -164,10 +177,9 @@ def validateDerivativeAllDirections(E, DE, position, N=100, h=0.0001):
 
 def validateSecondDerivative(DE, DDE, position, N=100, h=0.0001, dir_grad=None, dir_hess=None):
     """
-    Extension of validateDerivative.
-    Calculates the Gateaux derivative (a generalization of the concept of the
-    directional derivative) using the gradient of a given function.
-    Then plots the Gateaux derivative and the original Energy.
+    Extension of validateDerivative. Calculates the Gateaux derivative (a generalization
+    of the concept of the directional derivative) using the gradient of a given
+    function. Then plots the Gateaux derivative and the original Energy.
 
     The gradient is valid if the Gateaux derivative is the tangent of the Energy function.
 
@@ -192,142 +204,190 @@ def validateSecondDerivative(DE, DDE, position, N=100, h=0.0001, dir_grad=None, 
     :returns: None, but plots the Gateaux derivative and Gradient using matplotlib
     """
     gradient = DE(position)
-    if (dir_grad is not None):
+    if dir_grad is not None:
         direction_grad = dir_grad
     else:
         direction_grad = -gradient
 
-    if (dir_hess is not None):
+    if dir_hess is not None:
         direction_hess = dir_hess
     else:
         direction_hess = -gradient
 
-    coords = np.linspace(0, h*(N-1), num=N)
+    coords = np.linspace(0, h * (N - 1), num=N)
     Gradient = np.zeros((N))
     Gateaux = np.zeros((N))
     gateauxDerivative = np.dot(np.dot(DDE(position), direction_grad), direction_hess)
     initial = np.dot(gradient.ravel(), direction_hess.ravel())
     for i in range(N):
-        Gradient[i] = np.dot(
-            DE(position + coords[i]*direction_grad), direction_hess)
-        Gateaux[i] = initial + coords[i]*gateauxDerivative
+        Gradient[i] = np.dot(DE(position + coords[i] * direction_grad), direction_hess)
+        Gateaux[i] = initial + coords[i] * gateauxDerivative
     import matplotlib.pyplot as plt
-    plt.plot(coords, Gradient, label=r'$DE[x+td]\cdot h$')
-    plt.plot(coords, Gateaux, label=r'$DE[x]+tDDE[x]d\cdot h$')
-    plt.xlabel(r'$t$')
+
+    plt.plot(coords, Gradient, label=r"$DE[x+td]\cdot h$")
+    plt.plot(coords, Gateaux, label=r"$DE[x]+tDDE[x]d\cdot h$")
+    plt.xlabel(r"$t$")
     plt.legend()
     plt.show()
     return
 
 
-def GradientDescent(x0, E, DE, beta=0.5, sigma=0.5, maxIter=100, stopEpsilon=0., startTau=1., inverseSP=None, NonlinearCG=False, info_dict=None):
+def array_copy(x, np_mod):
+   # numpy
+   if np_mod.__name__ in ["numpy", "jax.numpy"]:
+       return x.copy()
+   # torch
+   elif np_mod.__name__ == "torch":
+       return x.clone()
+   else:
+       raise TypeError(f"Unsupported np_mod: {np_mod}")
 
-    def ArmijoRule(x, initialTau, beta, sigma, energy, descentDir, gradientAtX, E):
 
-        logging.debug(
-            'Calculating tau with Armijo Line Search (starting with tau^0 = {})'.format(initialTau))
 
-        if descentDir.dtype == object:
-            tangentSlope = 0
-            for i in range(len(descentDir)):
-                tangentSlope += np.dot(descentDir[i].ravel(), gradientAtX[i].ravel())
-        else:
-            tangentSlope = np.dot(descentDir.ravel(), gradientAtX.ravel())
 
-        if tangentSlope >= 0:
-            return 0
+def GradientDescent(
+   x0,
+   E,
+   DE,
+   beta=0.5,
+   sigma=0.5,
+   maxIter=100,
+   stopEpsilon=0.0,
+   startTau=1.0,
+   inverseSP=None,
+   NonlinearCG=False,
+   info_dict=None,
+   tauMax=1e10,
+   np_mod=np
+):
+   def ArmijoRule(x, initialTau, beta, sigma, energy, descentDir, gradientAtX, E,tauMax=1e10):
+       logging.debug("Calculating tau with Armijo Line Search (starting with tau^0 = {})".format(initialTau))
 
-        if not np.isfinite(energy):
-            logging.debug(
-                'Error: Initial energy is not finite. Rejecting step.)')
 
-        def ArmijoCondition(tau):
-            secantSlope = (E(x + tau * descentDir) - energy)/tau
-            cond = (secantSlope / tangentSlope) >= sigma
-            return cond
+       if descentDir.dtype == object:
+           tangentSlope = 0
+           for i in range(len(descentDir)):
+               tangentSlope += np_mod.dot(descentDir[i].ravel(), gradientAtX[i].ravel())
+       else:
+           tangentSlope = np_mod.dot(descentDir.ravel(), gradientAtX.ravel())
 
-        tauMin = 1e-10
-        tauMax = 1e10
-        tau = max(min(initialTau, tauMax), tauMin)
 
-        condition = ArmijoCondition(tau)
-        if condition:
-            logging.debug('initial stepsize too small. Will increase tau ...')
-            while (condition and (tau < tauMax)):
-                tau = tau / beta
-                condition = ArmijoCondition(tau)
+       if tangentSlope >= 0:
+           return 0
 
-            tau = beta * tau
-        else:
-            logging.debug('initial stepsize too large. Will decrease tau ...')
-            while ((not condition) and (tau > tauMin)):
-                tau = beta * tau
-                condition = ArmijoCondition(tau)
 
-        if (tau > tauMin):
-            logging.debug('accepted tau = {}'.format(tau))
-            return tau
-        else:
-            logging.debug('tau <= tauMin, returning 0')
-            return 0
+       if not np_mod.isfinite(energy):
+           logging.debug("Error: Initial energy is not finite. Rejecting step.)")
 
-    x = x0
-    energyNew = E(x)
-    tau = startTau
 
-    if NonlinearCG:
-        oldGradient = np.zeros_like(x)
-        oldDirection = np.zeros_like(x)
+       def ArmijoCondition(tau):
+           secantSlope = (E(x + tau * descentDir) - energy) / tau
+           cond = (secantSlope / tangentSlope) >= sigma
+           return cond
 
-    print('Initial energy {:.6f}'.format(energyNew))
-    pbar = tqdm(range(maxIter))
-    for i in pbar:
-        energy = energyNew
-        gradient = DE(x)
-        descentDir = - gradient
-        if (inverseSP is not None):
-            descentDir = inverseSP(descentDir)
 
-        # Fletcher-Reeves nonlinear conjugate gradient method.
-        if NonlinearCG:
-            nonlinCGBeta = (np.linalg.norm(descentDir.ravel()) /
-                            np.linalg.norm(oldGradient.ravel()))**2 if (i % 10) else 0
-            oldGradient = descentDir.copy()
-            descentDir += nonlinCGBeta*oldDirection
-            oldDirection = descentDir.copy()
+       tauMin = 1e-10
+       tau = max(min(initialTau, tauMax), tauMin)
 
-        tau = ArmijoRule(x, tau, beta, sigma, energy, descentDir, gradient, E)
 
-        if (NonlinearCG and (tau == 0)):
-            descentDir = oldGradient.copy()
-            # To be Jax compatible, do not use "oldDirection.fill(0)""
-            oldDirection = np.zeros_like(x)
-            tau = ArmijoRule(x, tau, beta, sigma, energy,
-                             descentDir, gradient, E)
+       condition = ArmijoCondition(tau)
+       if condition:
+           logging.debug("initial stepsize too small. Will increase tau ...")
+           while condition and (tau < tauMax):
+               tau = tau / beta
+               condition = ArmijoCondition(tau)
 
-        x = x + tau * descentDir
-        energyNew = E(x)
 
-        pbar.set_postfix_str(f'tau={tau:.6f} E={energyNew:.6f}')
+           tau = beta * tau
+       else:
+           logging.debug("initial stepsize too large. Will decrease tau ...")
+           while (not condition) and (tau > tauMin):
+               tau = beta * tau
+               condition = ArmijoCondition(tau)
 
-        if ((energy - energyNew) <= stopEpsilon):
-            pbar.close()
-            print(f"stopping after {i+1} iterations with energy {energyNew:.6f}")
-            break
 
-    if info_dict is not None:
-        info_dict['iterations'] = i
-        info_dict['tau'] = tau
-        info_dict['energy'] = energyNew
+       if tau > tauMin:
+           logging.debug("accepted tau = {}".format(tau))
+           return tau
+       else:
+           logging.debug("tau <= tauMin, returning 0")
+           return 0
 
-    return x
+
+   x = x0
+   energyNew = E(x)
+   tau = startTau
+
+
+   taulist=[]
+
+
+   if NonlinearCG:
+       oldGradient = np_mod.zeros_like(x)
+       oldDirection = np_mod.zeros_like(x)
+
+
+   print("Initial energy {:.6f}".format(energyNew))
+   pbar = tqdm(range(maxIter))
+   for i in pbar:
+       energy = energyNew
+       gradient = DE(x)
+       descentDir = -gradient
+       if inverseSP is not None:
+           descentDir = inverseSP(descentDir)
+
+
+       # Fletcher-Reeves nonlinear conjugate gradient method.
+       if NonlinearCG:
+           nonlinCGBeta = (
+               (np_mod.linalg.norm(descentDir.ravel()) / np_mod.linalg.norm(oldGradient.ravel())) ** 2 if (i % 10) else 0
+           )
+           oldGradient = array_copy(descentDir, np_mod)
+           descentDir += nonlinCGBeta * oldDirection
+           oldDirection = array_copy(descentDir, np_mod)
+
+
+       tau = ArmijoRule(x, tau, beta, sigma, energy, descentDir, gradient, E,tauMax)
+
+
+       if NonlinearCG and (tau == 0):
+           descentDir = array_copy(oldGradient, np_mod)
+           # To be Jax compatible, do not use "oldDirection.fill(0)""
+           oldDirection = np_mod.zeros_like(x)
+           tau = ArmijoRule(x, tau, beta, sigma, energy, descentDir, gradient, E)
+
+
+       taulist.append(tau)
+       x = x + tau * descentDir
+       energyNew = E(x)
+
+
+       pbar.set_postfix_str(f"tau={tau:.6f} E={energyNew:.6f}")
+
+
+       if (energy - energyNew) <= stopEpsilon:
+           pbar.close()
+           print(f"stopping after {i+1} iterations with energy {energyNew:.6f}")
+           break
+
+
+   if info_dict is not None:
+       info_dict["iterations"] = i
+       info_dict["tau"] = tau
+       info_dict["energy"] = energyNew
+       info_dict["taulist"] = taulist
+
+
+   return x
+
 
 
 def nesterov_II(x0, f_grad, alpha0, mu, L, restart, max_num_iter, stop_eps, proj_c=None):
     """
-    Implementation of the Nesterov optimizer for strong convex functions with convexity constant mu >= 0
-    that are continuously differentiable and have a Lipschitz continuous gradient with Lipschitz constant L.
-    The "Constant Step Scheme, II" from "Introductory Lectures on Convex Programming" :cite:`Ne04` was implemented.
+    Implementation of the Nesterov optimizer for strong convex functions with convexity
+    constant mu >= 0 that are continuously differentiable and have a Lipschitz
+    continuous gradient with Lipschitz constant L. The "Constant Step Scheme, II" from
+    "Introductory Lectures on Convex Programming" :cite:`Ne04` was implemented.
 
     Args:
         x0: Initial guess
@@ -358,9 +418,8 @@ def nesterov_II(x0, f_grad, alpha0, mu, L, restart, max_num_iter, stop_eps, proj
             x_new = y_old - 1 / L * f_grad(y_old)
 
         # compute new alpha by solving alpha_new^2 = (1 - alpha_new) * alpha^2 + q * alpha_new
-        alpha_new = - (alpha_old**2 - q) / 2 + \
-            math.sqrt(((alpha_old**2 - q)**2) / 4 + alpha_old**2)
-        assert 0 < alpha_new < 1, 'alpha_new not in intervall (0, 1).'
+        alpha_new = -(alpha_old**2 - q) / 2 + math.sqrt(((alpha_old**2 - q) ** 2) / 4 + alpha_old**2)
+        assert 0 < alpha_new < 1, "alpha_new not in intervall (0, 1)."
 
         # compute step size beta for extrapolation step
         beta = (alpha_old * (1 - alpha_old)) / (alpha_old**2 + alpha_new)
@@ -385,28 +444,38 @@ def nesterov_II(x0, f_grad, alpha0, mu, L, restart, max_num_iter, stop_eps, proj
             alpha_old = alpha0
             np.copyto(y_old, x_new)
 
-        if np.mod(k+1, 10) == 0:
+        if np.mod(k + 1, 10) == 0:
             kbar.set_postfix(res=res)
 
     return x_new
 
 
-def SplitBregman(v0, psi0, H, DH, zeta, DzetaExt, lambda_, minAlg, maxIter=10,
-                 stopEps=0.0, stopEpsSlice=None, b0=None, verbose=True,
-                 saveFunc=None):
+def SplitBregman(
+    v0,
+    psi0,
+    H,
+    DH,
+    zeta,
+    DzetaExt,
+    lambda_,
+    minAlg,
+    maxIter=10,
+    stopEps=0.0,
+    stopEpsSlice=None,
+    b0=None,
+    verbose=True,
+    saveFunc=None,
+):
     r"""
-    Performs the split Bregman iteration to minimize
-    :math:`E[v] := ||\zeta(v)||_1 + H[v]`, where both
-    :math:`v\mapsto||\zeta||_1` and :math:`v\mapsto H[v]` are convex
+    Performs the split Bregman iteration to minimize :math:`E[v] := ||\zeta(v)||_1 +
+    H[v]`, where both :math:`v\mapsto||\zeta||_1` and :math:`v\mapsto H[v]` are convex
     functionals.
 
     A single step of the split Bregman iteration is given by
 
     .. math::
         v^{k+1} &= \mathrm{argmin}_v\; H[v]+\lambda||\psi^k-\zeta[v]-b^k||_2^2\\
-
         \psi^{k+1} &= \mathrm{shrink}(\zeta[v^{k+1}]+b^k, 2/\lambda)\\
-
         b^{k+1} &= b^k - \psi^{k+1} + \zeta[v^{k+1}],
 
     where :math:`\mathrm{shrink}(z, w) := z/|z|\max(|z|-w, 0)` :cite:`GoOs09`.
@@ -481,35 +550,37 @@ def SplitBregman(v0, psi0, H, DH, zeta, DzetaExt, lambda_, minAlg, maxIter=10,
 
     def shrink(z, w):
         z_abs = np.abs(z)
-        z_nonzero = (z_abs != 0)
+        z_nonzero = z_abs != 0
         res = np.zeros_like(z)
-        res[z_nonzero] = z[z_nonzero] / z_abs[z_nonzero] * \
-            np.maximum(z_abs[z_nonzero] - w, 0)
+        res[z_nonzero] = z[z_nonzero] / z_abs[z_nonzero] * np.maximum(z_abs[z_nonzero] - w, 0)
         return res
 
     # Split Bregman iterations
     for i in range(maxIter):
         if verbose:
-            print("\nSplit-Bregman iteration {} / {} ...".format(i+1, maxIter))
+            print("\nSplit-Bregman iteration {} / {} ...".format(i + 1, maxIter))
 
         # The energy functional and its gradient for the update of v
-        def E(x): return H(x) + lambda_ * np.linalg.norm(psi - zeta(x) - b)**2
-        def DE(x): return DH(x) + lambda_ * DzetaExt(x, psi, b)
+        def E(x):
+            return H(x) + lambda_ * np.linalg.norm(psi - zeta(x) - b) ** 2
+
+        def DE(x):
+            return DH(x) + lambda_ * DzetaExt(x, psi, b)
 
         # Update v, psi and b
         v_old = v
         v = minAlg(v, E, DE)
         zeta_v = zeta(v)
-        psi = shrink(zeta_v + b, 2/lambda_)
+        psi = shrink(zeta_v + b, 2 / lambda_)
         b += zeta_v - psi
 
         # Save intermediate results
         if saveFunc is not None:
-            saveFunc(i+1, v, psi, b)
+            saveFunc(i + 1, v, psi, b)
 
         # Check the stopping criterion
         if stopEpsSlice is None:
-            update = np.linalg.norm(v-v_old)
+            update = np.linalg.norm(v - v_old)
         else:
             update = np.linalg.norm(v[stopEpsSlice] - v_old[stopEpsSlice])
 
@@ -517,8 +588,7 @@ def SplitBregman(v0, psi0, H, DH, zeta, DzetaExt, lambda_, minAlg, maxIter=10,
             print("\nUpdate = {}".format(update))
 
         if update < stopEps:
-            print("\nStopping after {} iterations with update="
-                  "{}.".format(i+1, update))
+            print("\nStopping after {} iterations with update=" "{}.".format(i + 1, update))
             break
 
     return v
@@ -530,15 +600,15 @@ def getTimestepWidthWithSimpleLineSearch(E, direction, x, start_tau=1, tau_min=2
     tau = start_tau
 
     e = E(x)
-    eNew = E(x+tau*direction)
+    eNew = E(x + tau * direction)
 
-    while ((eNew >= e) and (tau >= tau_min)):
+    while (eNew >= e) and (tau >= tau_min):
         tau = tau * 0.5
-        eNew = E(x+tau*direction)
+        eNew = E(x + tau * direction)
 
     # No energy descent for tau >= tauMin, so we don't want the step to be done.
     # The stopping criterion also handles this case.
-    if (tau < tau_min):
+    if tau < tau_min:
         tau = 0
 
     return tau
@@ -547,7 +617,7 @@ def getTimestepWidthWithSimpleLineSearch(E, direction, x, start_tau=1, tau_min=2
 def GaussNewtonAlgorithm(x0, F, DF, maxIter=50, stopEpsilon=0):
     x = x0.copy()
     f = F(x)
-    fNormSqrOld = np.linalg.norm(f)**2
+    fNormSqrOld = np.linalg.norm(f) ** 2
     print("Initial fNormSqr {:#.6g}".format(fNormSqrOld))
     tau = 1
 
@@ -567,7 +637,7 @@ def GaussNewtonAlgorithm(x0, F, DF, maxIter=50, stopEpsilon=0):
         x -= direction
 
         f = F(x)
-        fNormSqr = np.linalg.norm(f)**2
+        fNormSqr = np.linalg.norm(f) ** 2
 
         # If the target functional did not decrease with the update, try to find a smaller step
         # so that it does. This step size control is extremely simple and not very efficient, but
@@ -577,15 +647,15 @@ def GaussNewtonAlgorithm(x0, F, DF, maxIter=50, stopEpsilon=0):
             direction *= -1
             # getTimestepWidthWithSimpleLineSearch doesn't support "widening", so let it start with 2*tau.
             tau = getTimestepWidthWithSimpleLineSearch(
-                lambda v: np.linalg.norm(F(v))**2, direction, x, start_tau=min(2*tau, 1))
-            x += tau*direction
+                lambda v: np.linalg.norm(F(v)) ** 2, direction, x, start_tau=min(2 * tau, 1)
+            )
+            x += tau * direction
             f = F(x)
-            fNormSqr = np.linalg.norm(f)**2
+            fNormSqr = np.linalg.norm(f) ** 2
         else:
             tau = 1
 
-        i_bar.set_description("\u03C4={:#.2g}, E={:#.5g}, \u0394={:.1e}".format(
-            tau, fNormSqr, fNormSqrOld - fNormSqr))
+        i_bar.set_description("\u03C4={:#.2g}, E={:#.5g}, \u0394={:.1e}".format(tau, fNormSqr, fNormSqrOld - fNormSqr))
 
         if ((fNormSqrOld - fNormSqr)) <= stopEpsilon * fNormSqr or np.isclose(fNormSqr, 0):
             break

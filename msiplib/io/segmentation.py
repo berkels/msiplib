@@ -4,8 +4,11 @@
 
 import warnings
 import netCDF4 as nc4
+import matplotlib.pyplot as plt
 import numpy as np
 from imageio import imread, imwrite
+from pathlib import Path
+from skimage.measure import find_contours
 from skimage.segmentation import find_boundaries
 from msiplib.io import read_image
 from msiplib.metrics import segmentation_scores
@@ -118,6 +121,42 @@ def load_seg_mask_from_image_file(path):
     im = imread(path)
 
     return convert_image_to_segmentation_labels(im)
+
+
+def saveOverlayedSegmentation(image, u, filepath, alpha=0.75):
+    """
+    Draws the individual segments given by np.argmax(u, 2) with transparency
+    on top of the image and saves the result as a png image.
+
+    """
+    # TODO: Merge with the convert_segmentation_to_image function
+
+    # Convert the soft segmentation u into a hard segmentation h
+    h = np.argmax(u, 2)
+
+    # Create a colormap
+    colormap = create_segmentation_colormap()
+
+    # Issue a warning if u contains more segments than colors are available in
+    # colormap
+    if u.shape[2] > colormap.shape[0]:
+        warning("Requested a colored segmentation with " + str(u.shape[2])
+                + " segments, but the colormap contains only "
+                + str(colormap.shape[0]) + " colors. Some of the segments will "
+                "not be colorized in the resulting image.")
+        tmp = np.zeros((u.shape[2], 3))
+        tmp[0:colormap.shape[0], :] = colormap
+        colormap = tmp
+
+    # Draw the colored segments with an opacity of 1-alpha on top of the image
+    coloredSegmentation = np.array([[255*(alpha*image[x, y]
+                                          + (1-alpha)*colormap[h[x, y]])
+                                     for y in range(image.shape[1])]
+                                    for x in range(image.shape[0])]
+                                   ).astype(np.uint8)
+
+    # Save the colored segmentation to file
+    imwrite(filepath, coloredSegmentation)
 
 
 def saveColoredSegmentation(segmentation_mask, filename, colormap=None, ignore_label=None, add_true_boundaries=False,
@@ -262,6 +301,12 @@ def visualize_correct_wrong_pixels(basename, seg, gt=None, gt_file=None, ignore_
         else:
             # RGB image
             colormap = np.unique(gt_im.reshape((-1, gt_im.shape[-1])), axis=0)
+        
+        # if ignore_label is None, add black as color for correcty classified or wrongly classified pixels, resp.
+        # TODO: could catch the case where black is present in the colormap and another color has to be added.
+        if ignore_label is None:
+            colormap = np.insert(colormap, 0, np.array([0.0, 0.0, 0.0]), axis=0)
+
     else:
         colormap = create_segmentation_colormap()
         colormap = np.insert(colormap, 0, np.array([0.0, 0.0, 0.0]), axis=0)
@@ -272,32 +317,220 @@ def visualize_correct_wrong_pixels(basename, seg, gt=None, gt_file=None, ignore_
     if ignore_label is not None:
         seg_perm = add_ignore_label_to_seg_mask(seg_perm, gt, ignore_label)
 
-    # after permuting the segmentation labels difference of seg and gt can be computed.
+    # if no ignore label is given, increase every label by 1 to be able to compensate for adding black to colormap
+    if ignore_label is None:
+        seg_perm_increased = seg_perm + 1
+    else:
+        seg_perm_increased = seg_perm
+
+    # after permuting the segmentation labels, the difference of seg and gt can be computed.
     # every non-zero entry is wrongly classified.
     wrong_pxs = np.zeros(seg_perm.shape, dtype=np.uint8)
-    wrong_pxs[(seg_perm - gt) != 0] = seg_perm[(seg_perm - gt) != 0]
+    wrong_pxs[(seg_perm - gt) != 0] = seg_perm_increased[(seg_perm - gt) != 0]
     wrong_pxs_im = convert_segmentation_to_image(wrong_pxs, colormap)
     imwrite(basename.replace('.png', '_wrong.png'), (255 * wrong_pxs_im).astype('uint8'))
 
     correct_pxs = np.zeros(seg_perm.shape, dtype=np.uint8)
-    correct_pxs[(seg_perm - gt) == 0] = seg_perm[(seg_perm - gt) == 0]
+    correct_pxs[(seg_perm - gt) == 0] = seg_perm_increased[(seg_perm - gt) == 0]
     correct_pxs_im = convert_segmentation_to_image(correct_pxs, colormap)
     imwrite(basename.replace('.png', '_correct.png'), (255 * correct_pxs_im).astype('uint8'))
 
 
 def add_ignore_label_to_seg_mask(seg, gt, ignore_label=0):
-    '''
-        Marks all ignored pixels indicated by the ground truth as 'ignored' by changing the labels of these pixels to 0
-        and increasing the other labels by 1.
-        Args:
-            seg: segmentation mask
-            gt: ground truth
-            ignore_label: ignore label used in the ground truth
-        Returns
-            segmentation mask where in ground truth ignored pixels are masked with label 0
-    '''
+    """
+    Marks all pixels in the segmentation that are indicated as ignored by the ground truth
+    by changing the labels of these pixels to 0 and increasing the other labels by 1.
+
+    Args:
+        seg: segmentation mask
+        gt: ground truth
+        ignore_label: ignore label used in the ground truth
+
+    Returns
+        segmentation mask where in ground truth ignored pixels are masked with label 0
+    """
+    # TODO: processes only ignore label 0
     t_mask = seg + 1
     t_mask[gt == ignore_label] = 0
 
     return t_mask
     # return rebuild_segment_numbering(t_mask)
+
+
+def plot_RGB_feature_distributions(image, labels, ignore_label=None, size=1.5, cmap=None, means=None, pcs=None,
+                                   std_devs=None):
+    """ plots the feature distribution of an RGB image given segmentation labels """
+    import plotly.graph_objects as go
+
+    diff_labels = np.unique(labels)
+    num_segments = diff_labels.shape[0]
+
+    if cmap is None:
+        cmap = (255 * create_segmentation_colormap())[:len(diff_labels)]
+    else:
+        if num_segments > cmap.shape[0]:
+            for i in range(num_segments - cmap.shape[0]):
+                new_col = 1 / 2 * (cmap[i] + cmap[i + 1])
+                cmap = np.concatenate((cmap, new_col[np.newaxis]), axis=0)
+
+    fig = go.Figure()
+
+    # if colormap contains grayscale values, convert the map to an rgb map
+    if cmap.ndim == 1:
+        cmap = np.transpose(np.broadcast_to(cmap, (3, cmap.shape[0])))
+
+    # plot pixels with ignore label
+    if ignore_label is not None:
+        vectors = image[labels == ignore_label]
+        color = 'rgb({}, {}, {})'.format(cmap[ignore_label, 0], cmap[ignore_label, 1], cmap[ignore_label, 2])
+        fig.add_trace(go.Scatter3d(x=vectors[:, 0], y=vectors[:, 1], z=vectors[:, 2],
+                                   name=('{}'.format('Pxs with ignore label')), mode='markers',
+                                   marker_color=(color)))
+        # remove color used by ignored pixels
+        cmap = cmap[diff_labels != ignore_label]
+        diff_labels = diff_labels[diff_labels != ignore_label]
+
+    # add a trace for every segment
+    for i, l in enumerate(diff_labels):
+        vectors = image[labels == l]
+        color = 'rgb({}, {}, {})'.format(cmap[i, 0], cmap[i, 1], cmap[i, 2])
+        fig.add_trace(go.Scatter3d(x=vectors[:, 0], y=vectors[:, 1], z=vectors[:, 2],
+                                   name=('Segment {}'.format(i + 1)), mode='markers',
+                                   marker_color=(color)))
+
+    fig.update_traces(mode='markers', marker_line_width=2, marker_size=size)
+
+    if means is not None:
+        for i in range(len(diff_labels)):
+            color = 'rgb({}, {}, {})'.format(cmap[i, 0], cmap[i, 1], cmap[i, 2])
+            fig.add_trace(go.Scatter3d(x=[means[i, 0]], y=[means[i, 1]], z=[means[i, 2]],
+                                    name=('Mean of segment {}'.format(i + 1)), marker_color=(color)))
+
+    # if pcs is not None and std_devs is not None:
+    #     for i in range(len(diff_labels)):
+    #         for j in range(3):
+    #             fig = fig.add_trace(go.Cone(
+    #                                 x=[means[i, 0]],
+    #                                 y=[means[i, 1]],
+    #                                 z=[means[i, 2]],
+    #                                 u=[std_devs[i, j] * pcs[i, j, 0]],
+    #                                 v=[std_devs[i, j] * pcs[i, j, 1]],
+    #                                 w=[std_devs[i, j] * pcs[i, j, 2]],
+    #                                 sizemode="absolute",
+    #                                 sizeref=2,
+    #                                 anchor="tail",
+    #                                 name=('PC {} of segment {}'.format(j + 1, i + 1))))
+
+    # fig.update_layout(
+    #     scene=dict(domain_x=[0, 1],
+    #                camera_eye=dict(x=-1.57, y=1.36, z=0.58)))
+
+    # Set options common to all traces
+    fig.update_layout(title='Feature distribution', yaxis_zeroline=False, xaxis_zeroline=False)
+
+    fig.show()
+
+
+def saveSegmentationContours(image, u, filepath):
+    """Draws the outline of the segment boundaries given by np.argmax(u, 2) on
+       top of the image and saves the result as a png image."""
+    # Convert the soft segmentation u into a hard segmentation h
+    h = np.argmax(u, 2)
+
+    # This uses ideas from https://stackoverflow.com/a/34769840 to render the background
+    # image exactly with its pixel resolution.
+
+    # On-screen, things will be displayed at 80dpi regardless of what we set here
+    # This is effectively the dpi for the saved figure. We need to specify it,
+    # otherwise `savefig` will pick a default dpi based on your local configuration
+    dpi = 80
+
+    height = image.shape[0]
+    width = image.shape[1]
+
+    # What size does the figure need to be in inches to fit the image?
+    figsize = width / float(dpi), height / float(dpi)
+
+    # Create a figure of the right size with one axes that takes up the full figure
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes([0, 0, 1, 1])
+
+    # Add the image as background so that the segmentation contours can be drawn
+    # on top.
+    ax.imshow(image*255, extent=[-0.5, image.shape[1]-0.5, -0.5,
+                                 image.shape[0]-0.5],
+              cmap='gray', vmin=0, vmax=255, interpolation='nearest')
+
+    # Find the contours of all segments
+    for i in range(u.shape[2]):
+        # Create a binary image from the hard segmentation
+        feature_i_segments = np.zeros(image.shape)
+        feature_i_segments[h == i] = 1
+
+        # Use the binary image to find the segment contours with find_contours
+        # and plot the contours on top of the image
+        feature_i_contours = find_contours(feature_i_segments, 0.5)
+        for c in feature_i_contours:
+            c[:, [0, 1]] = c[:, [1, 0]]
+            c[:, 1] = image.shape[0] - c[:, 1] - 1
+            plt.plot(*(c.T), linewidth=1, color='red')
+
+    # Save the figure as an image (with the format given by the extension in
+    # filepath)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_aspect('equal', 'box')
+    plt.gca().set_axis_off()
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    plt.margins(0, 0)
+    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+    plt.savefig(filepath, bbox_inches='tight', pad_inches=0, dpi=dpi)
+    plt.close(fig)
+
+
+def saveSoftSegmentationImages(image, u, directory):
+    """Saves images of each segment in the soft segmentation u to the given
+       directory."""
+    # Remove a trailing "/" sign from directory if necessary
+    if directory[-1] == "/":
+        directory = directory[:-1]
+
+    # Create the directory to which the images are saved
+    Path(directory).mkdir(parents=True, exist_ok=True)
+
+    # Save images of each segment, either using u as the transparency or by
+    # saving u directly
+    for k in range(u.shape[2]):
+        imwrite(directory + "/image_segment_" + str(k) + ".png",
+                        np.uint8(255 * image * u[:, :, k]))
+        imwrite(directory + "/noimage_segment_" + str(k) + ".png",
+                        np.uint8(255 * u[:, :, k]))
+
+
+def saveSegmentation(image, u, directory, filename_base, alpha=0.75):
+    """
+    Saves the soft segmentation of image given by u in various formats
+
+    The input image is assumed to be a three dimensional ndarray, where the
+    third dimension corresponds to the individual color channels.
+    """
+    # Convert the input image to a grayscale image
+    if image.shape[2] == 3:
+        img = image[:, :, 0]
+        #img = (image[:, :, 0] + image[:, :, 1] + image[:, :, 2]) / 3
+    else:
+        img = image[:, :, 0]
+
+    # Add a trailing "/" sign to the directory path if necessary
+    if directory[-1] != "/":
+        directory += "/"
+
+    saveOverlayedSegmentation(img, u, directory + "colorized_" + filename_base
+                            + ".png", alpha)
+    for i in range(image.shape[-1]):
+        Path(directory + str(i)).mkdir(parents=True, exist_ok=True)
+        saveSegmentationContours(image[:, :, i], u,
+                                 directory + str(i) + "/contours_" + filename_base + ".svg")
+    saveSoftSegmentationImages(img, u, directory + "segments_"
+                               + filename_base)
