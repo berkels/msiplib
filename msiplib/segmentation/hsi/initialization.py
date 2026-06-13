@@ -31,7 +31,7 @@ def initialize_segmentation(image, k, valid_mask, args, gt=None, seed=42):
         reshapedimage = pca.transform(image.reshape((-1, image.shape[-1])))
     else:
         logger.info("Initialization runs on full dimension: %s", image.shape[-1])
-        reshapedimage = np.reshape(image, newshape=(-1, image.shape[-1]))
+        reshapedimage = np.reshape(image, shape=(-1, image.shape[-1]))
 
     logger.info("Initialization method: %s", args["init"])
 

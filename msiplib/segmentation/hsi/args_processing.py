@@ -57,9 +57,9 @@ def parse_args():
             "anisotropic-eps-normal",
             "anisotropic-eps-discard",
             "epsAMS",
-            "kernel",
+            "kMS",
             "kernelpca-eps-inverse",
-            "kernelpca-eps-normal", "AMS",
+            "kernelpca-eps-normal", "phiAMS",
         ],
         help="Indicator function.",
     )
@@ -398,6 +398,76 @@ def initialize_logger(args):
         ms_logger.info("Indicator function: epsAMS")
         ms_logger.info("Epsilon: %s", args["ind_eps"])
         ms_logger.info("Maximum number of fixed point iterations: %s", args["ind_params"][0])
+    elif 'AMS' in args['ind_func']:
+        # the non-squared anisotropic 2-norm with regularizers
+        # is used as indicator function
+        ms_logger.info('Indicator function: %s', args['ind_func'])
+        ms_logger.info('Maximum number of fixed point iterations: %s', args['ind_params'][0])
+        if args['ind_func'] == 'phiAMS':
+            ms_logger.info('Scaling factor of weighted trace: %s', args['ind_params'][1])
+            ms_logger.info('Scaling factor of volume regularizer: %s', args['ind_params'][2])
+    elif args["ind_func"] in ["kMS", "kernelpca-eps-inverse", "kernelpca-eps-normal"]:
+        # use a kernel to compute the indicator function in a higher dimensional feature space (RKHS)
+        ms_logger.info("Indicator function: %s", args["ind_func"])
+        if args["ind_func"] == "kMS":
+            ms_logger.info("Kernel mode: 2-norm in feature space (RKHS)")
+        ms_logger.info("Kernel function: %s", args["kernel"])
+        if args["kernel"] == "gaussian":
+            ms_logger.info("Kernel parameter gamma: %s", args["ind_params"][0])
+        elif args["kernel"] == "polynomial":
+            ms_logger.info("Kernel parameter gamma: %s", args["ind_params"][0])
+            ms_logger.info("Kernel parameter c_0: %s", args["ind_params"][1])
+            ms_logger.info("Kernel parameter d: %s", args["ind_params"][2])
+        elif args["kernel"] == "chi-squared":
+            ms_logger.info("Kernel parameter gamma: %s", args["ind_params"][0])
+        elif args["kernel"] == "laplacian":
+            ms_logger.info("Kernel parameter gamma: %s", args["ind_params"][0])
+        elif args["kernel"] == "sigmoid":
+            ms_logger.info("Kernel parameter gamma: %s", args["ind_params"][0])
+            ms_logger.info("Kernel parameter c_0: %s", args["ind_params"][1])
+        elif args["kernel"] == "direct-summation":
+            ms_logger.info(
+                "Spatial features: mean of local neighborhood of size %s x %s",
+                args["ind_params"][0],
+                args["ind_params"][0],
+            )
+            ms_logger.info("Spatial features: pad by replicating the value of the last pixel.")
+            ms_logger.info("Spatial kernel: gaussian")
+            ms_logger.info("Spatial kernel parameter gamma: %s", args["ind_params"][1])
+            ms_logger.info("Spectral kernel: polynomial")
+            ms_logger.info("Spectral kernel parameter gamma: %s", args["ind_params"][2])
+            ms_logger.info("Spectral kernel parameter c_0: %s", args["ind_params"][3])
+            ms_logger.info("Spectral kernel parameter d: %s", args["ind_params"][4])
+        elif args["kernel"] == "weighted-summation":
+            ms_logger.info(
+                "Spatial features: mean of local neighborhood of size %s x %s",
+                args["ind_params"][0],
+                args["ind_params"][0],
+            )
+            ms_logger.info("Spatial features: pad by replicating the value of the last pixel.")
+            if args["ind_params"][1] < 0 or args["ind_params"][1] > 1:
+                ms_logger.warning("Weight mu not in [0, 1]. Drop integer part and use the decimal part as weight.")
+                args["ind_params"][1] = args["ind_params"][1] % 1
+            ms_logger.info("Weight mu: %s", args["ind_params"][1])
+            ms_logger.info("Spatial kernel: gaussian")
+            ms_logger.info("Spatial kernel parameter gamma: %s", args["ind_params"][2])
+            ms_logger.info("Spectral kernel: polynomial")
+            ms_logger.info("Spectral kernel parameter gamma: %s", args["ind_params"][3])
+            ms_logger.info("Spectral kernel parameter c_0: %s", args["ind_params"][4])
+            ms_logger.info("Spectral kernel parameter d: %s", args["ind_params"][5])
+        elif args["kernel"] == "cross-information":
+            ms_logger.info(
+                "Spatial features: mean of local neighborhood of size %s x %s",
+                args["ind_params"][0],
+                args["ind_params"][0],
+            )
+            ms_logger.info("Spatial features: pad by replicating the value of the last pixel.")
+            ms_logger.info("Spatial kernel: gaussian")
+            ms_logger.info("Spatial kernel parameter gamma: %s", args["ind_params"][1])
+            ms_logger.info("Spectral kernel: polynomial")
+            ms_logger.info("Spectral kernel parameter gamma: %s", args["ind_params"][2])
+            ms_logger.info("Spectral kernel parameter c_0: %s", args["ind_params"][3])
+            ms_logger.info("Spectral kernel parameter d: %s", args["ind_params"][4])
 
     if args["ignore_label"] is not None:
         ms_logger.info("Ignore label: %s", args["ignore_label"])
@@ -434,6 +504,31 @@ def map_ind_func_to_folder_name(ind_func, kernel=None):
         folder = "anisotropic_2norm_eps_discard"
     elif ind_func == "epsAMS":
         folder = "epsAMS"
+    elif ind_func == 'phiAMS':
+        folder = 'phiAMS'
+    elif ind_func in ["kMS", "kernelpca-eps-inverse", "kernelpca-eps-normal"]:
+        # indicator function folder
+        folder = ind_func
+
+        # kernel folder
+        if kernel == "gaussian":
+            folder = f"{folder}/gaussian"
+        elif kernel == "polynomial":
+            folder = f"{folder}/polynomial"
+        elif kernel == "chi-squared":
+            folder = f"{folder}/chi-squared"
+        elif kernel == "laplacian":
+            folder = f"{folder}/laplacian"
+        elif kernel == "cosine":
+            folder = f"{folder}/cosine"
+        elif kernel == "sigmoid":
+            folder = f"{folder}/sigmoid"
+        elif kernel == "direct-summation":
+            folder = f"{folder}/direct-summation"
+        elif kernel == "weighted-summation":
+            folder = f"{folder}/weighted-summation"
+        elif kernel == "cross-information":
+            folder = f"{folder}/cross-information"
 
     return folder
 

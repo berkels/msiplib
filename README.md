@@ -11,6 +11,8 @@ the papers:
 
 [3] Setareh Medghalchi, Ehsan Karimi, Sang-Hyeok Lee, Benjamin Berkels, Ulrich Kerzel and Sandra Korte-Kerzel. Three-Dimensional Damage Characterisation in Dual Phase Steel Using Deep Learning. *Materials & Design*, 232:112108, 2023. [[DOI](https://doi.org/10.1016/j.matdes.2023.112108) | [arXiv](https://arxiv.org/abs/2303.05869)]
 
+[4] Jan-Christopher Cohrs. Mumford-Shah type models for unsupervised hyperspectral image segmentation. Dissertation. December 2025. [[DOI](https://doi.org/10.18154/RWTH-2025-10634)]
+
 We appreciate any feedback on your experience with our methods. We would also appreciate if you cite the above mentioned papers when you use the software in your work. In case you encounter any problems when using this software, please do not hesitate to contact us: <berkels@aices.rwth-aachen.de>
 
 ## Installation
@@ -31,8 +33,8 @@ from the root directory of the repository. This will also automatically install 
 
 ## Usage
 Examples of simple segmentation `MS.py` and denoising code for grayscale and RGB images `ROF.py` can be found in `examples`, as well as the examples for crystallographic data extraction described in paper [2].
-A script with examples running the methods for unsupervised hyperspectral image segmentation published in [1] can be found in `tools/hsi_segmentation`.
-A script to get the atom postions inside the unit cell of a crystalline image following the method in paper [2] is given in `tools/get_motif_atoms.py`. An example for the parameter file for the script is given in `tools/get_motif_atoms.yaml`.
+A script with examples running the methods for unsupervised hyperspectral image segmentation published in [1] and [4] can be found in `tools/hsi_segmentation`.
+A script to get the atom positions inside the unit cell of a crystalline image following the method in paper [2] is given in `tools/get_motif_atoms.py`. An example for the parameter file for the script is given in `tools/get_motif_atoms.yaml`.
 A script for the affine registration of image series used in [3] is `tools/match_series.py`, an example parameter file is `tools/match_series.yaml`.
 
 ## Documentation
