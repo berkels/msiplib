@@ -25,6 +25,7 @@ from msiplib.segmentation.hsi.input_output import (
 
 from msiplib.decomposition import pca
 from msiplib.segmentation.functional import ms_functional, zach_functional
+from msiplib.segmentation.indicator_functions import compute_kernel_matrix
 
 from msiplib.io import saveArrayAsNetCDF
 from msiplib.metrics import segmentation_scores
@@ -94,8 +95,8 @@ def ms_segmentation(args):
             | 'irreg_eps': 1e-06,
             | # indicator function (str)
             | # choices: ['2', 'anisotropic-eps-inverse', 'anisotropic-eps-normal',
-            | # 'anisotropic-eps-discard', 'epsAMS', 'AMS']
-            | 'ind_func': 'kernel',
+            | # 'anisotropic-eps-discard', 'epsAMS', 'phiAMS', 'kMS']
+            | 'ind_func': 'kMS',
             | # epsilon to regularize indicator function (float)
             | 'ind_eps': 0.125,
             | # kernel function (str)
@@ -143,14 +144,14 @@ def ms_segmentation(args):
             | # useful when init method should run on reduced data, but the segmentation method on the full data
             | 'reduce_dim_init': False,
             | # computation of estimates of segment means (str). choices: ['arithmetic', 'trimmed']
-            | # does not apply to epsAMS
+            | # does not apply to epsAMS, phiAMS, and kMS
             | 'means': 'arithmetic',
             | # computation of estimates of segment variances (str). choices: ['sdm', 'trimmed']
             | # sdm: squared differences from mean
-            | # does not apply to epsAMS
+            | # does not apply to epsAMS, phiAMS, and kMS
             | 'variances': 'sdm',
             | # computation of estimates of principal components of the segments (str). choices: ['pca', 'mnf']
-            | # does not apply to epsAMS
+            | # does not apply to epsAMS, phiAMS, and kMS
             | 'components': 'pca',
             | # proportion of points trimmed at both sides when computing trimmed means or variances (float)
             | 'trim_proportion': 0.5,
@@ -258,11 +259,14 @@ def ms_segmentation(args):
         saveArrayAsNetCDF(segmentation, f"{f_name}.nc")
         save_segmentation(f_name, segmentation, orig_save, args["gt_file"], args["ignore_label"], True, args["irreg"])
 
+    # normalize image after dimensionality reduction since chi-squared kernel needs non-negative values as input
+    if args["kernel"] == "chi-squared":
+        np.subtract(inputimage, inputimage.min(), out=inputimage)
 
     # compute means of segments based on initial segmentation for stopping criterion
     st_means = get_segmentation_mean_values(inputimage, segmentation, k)
 
-    # epsAMS and AMS need estimates for means, principal components and weights
+    # epsAMS and phiAMS need estimates for means, principal components and weights
     if "AMS" in args["ind_func"]:
         means = st_means.copy()
         pcs = np.empty((k, inputimage.shape[-1], inputimage.shape[-1]), dtype=inputimage.dtype)
@@ -302,6 +306,10 @@ def ms_segmentation(args):
     console_handler = logging.StreamHandler(sys.stdout)
     outer_logger.addHandler(console_handler)
 
+    # if kMS is chosen as the indicator function, precompute kernel matrix
+    if "kernel" in args["ind_func"] or args["ind_func"] == "kMS":
+        kernel_matrix = compute_kernel_matrix(inputimage, args["kernel"], args["ind_params"])
+        print("Kernel matrix precomputed.")
 
     # if computations should be run on GPU, copy data to GPU
     if args["use_gpu"]:
@@ -325,7 +333,7 @@ def ms_segmentation(args):
                 means = cp.array(means)
                 pcs = cp.array(pcs)
                 weights = cp.array(weights)
-            elif "kernel" in args["ind_func"]:
+            elif "kernel" in args["ind_func"] or args["ind_func"] == "kMS":
                 kernel_matrix = cp.array(kernel_matrix)
 
     # initialize u
@@ -487,7 +495,7 @@ def ms_segmentation(args):
     save_variables(filepath_name, u, segmentation_new, args, orig_save, mean_save, pcs_save, weights_save)
 
     # plot statistics against outer iterations
-    if args["ind_func"] in ["2", "kernel"]:
+    if args["ind_func"] in ["2", "kMS"]:
         smallest_ev = [np.zeros(k) for i in range(it)]
         largest_ev = [np.zeros(k) for i in range(it)]
     plot_iteration_stats(

@@ -11,6 +11,8 @@ from msiplib.segmentation.indicator_functions import (
     anisotropic_2norm,
     euclidean_norm,
     epsAMS,
+    phiAMS,
+    kMS,
     pca_eps_discard_norm,
 )
 from msiplib.metrics import segmentation_scores
@@ -143,6 +145,26 @@ def compute_indicator_functions(
                     valid_mask=valid_mask,
                 )
                 np.subtract(f[:, :, l], min_log_det_cov, out=f[:, :, l])
+            elif args["ind_func"] == "phiAMS":
+                logger.info("Segment %s", l)
+                # the parameter-free non-squared anisotropic 2-norm is used as indicator function
+                f[:, :, l], means[l], pcs[l], weights[l] = phiAMS(
+                    image,
+                    segmentation,
+                    l,
+                    means,
+                    pcs,
+                    weights,
+                    valid_mask=valid_mask,
+                    tol=1e-05,
+                    max_iter=args["ind_params"][0],
+                    alpha=args["ind_params"][1],
+                    beta=args["ind_params"][2],
+                )
+            elif args["ind_func"] == "kMS":
+                logger.info("Segment %s", l)
+                # the 2-norm in feature space associated with the chosen kernel is used as indicator function
+                f[:, :, l] = kMS(kernel_matrix, segmentation, l, valid_mask)
 
     if "AMS" in args["ind_func"]:
         # in the case of epsAMS return means, PCs and weights to reuse them
