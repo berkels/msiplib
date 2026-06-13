@@ -145,7 +145,7 @@ def main():
     os.environ['OUTPUT_DIR'] = '.'
 
     # set an environment variable pointing to the parent folder of the msiplib repository
-    os.environ['REPOS_DIR'] = '../../..'
+    os.environ['REPOS_DIR'] = os.path.abspath(__file__).split('msiplib')[0][:-1]
 
     # run segmentation algorithm with epsAMS as published in [1]
     # it runs with the parameters set above in args
