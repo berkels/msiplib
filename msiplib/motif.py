@@ -1,4 +1,6 @@
 r"""
+Authors: Amel Shamseldeen Ali Alhassan and Benjamin Berkels
+
 This is the first step of the `Direct motif extraction from high resolution crystalline STEM images`.
 
 Full explanation is covered in section 4 of :cite:`AlBe23`
