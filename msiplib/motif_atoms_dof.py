@@ -1,4 +1,5 @@
 """
+Authors: Amel Shamseldeen Ali Alhassan and Benjamin Berkels
 This is the `Direct motif extraction from high resolution crystalline STEM images` as described in :cite:`AlBe23`.
 
 The main function of this section is :py:meth:`get_motif_atoms_dof<msiplib.motif_atoms_dof.get_motif_atoms_dof>`  and can be called from outside the library. 
